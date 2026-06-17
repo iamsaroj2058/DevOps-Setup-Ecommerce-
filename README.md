@@ -32,8 +32,8 @@ Install the following on your system:
 
 ## 📦 Step 1 — Clone the Project
 ```sh
-git clone https://github.com/dev-rathankumar/django_clickmart_
-cd django_clickmart_
+git clone https://github.com/iamsaroj2058/DevOps-Setup-Ecommerce-
+cd DevOps-Setup-Ecommerce-
 ```
 
 ## Step 2 - Remove Git history
@@ -60,7 +60,7 @@ Now you have the full source code in your own repo.
 Create virtual environment
 ```sh
 cd backend-drf
-python3 -m venv env
+python -m venv env
 source env/bin/activate     # Mac / Linux
 # OR
 env\Scripts\activate        # Windows
@@ -75,6 +75,7 @@ Create ```.env``` file
 ```sh
 DEBUG=True
 SECRET_KEY=<YOUR-SECRET-KEY>
+
 
 # Database Settings
 DB_NAME=<DATABASE-NAME>
