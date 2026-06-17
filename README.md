@@ -1,22 +1,22 @@
-
 # 🚀 Django Production Deployment (Step-by-Step)
-### Docker + PostgreSQL + GitHub Actions (CI/CD) + Linode + Nginx + Gunicorn + Custom Domain + SSL
 
-This repository demonstrates how to deploy a **Django application** from local development to **production** using:
-- Django  
-- Docker & Docker Compose  
-- PostgreSQL  
-- GitHub Actions (CI/CD)  
-- Linode VPS  
+Docker + PostgreSQL + GitHub Actions (CI/CD) + AWS EC2 + Nginx + Gunicorn + Custom Domain + SSL
+
+This repository demonstrates how to deploy a Django application from local development to production using:
+
+- Django
+- Docker & Docker Compose
+- PostgreSQL
+- GitHub Actions (CI/CD)
+- AWS EC2 (Free Tier / Student Account)
 - Nginx
 - Gunicorn
 - Custom Domain
-- SSL (Let’s Encrypt)
-
+- SSL (Let's Encrypt)
 
 You will go step-by-step from:
 
-**Local → Docker → GitHub → Linode → Domain → HTTPS**
+**Local → Docker → GitHub → AWS EC2 → Domain → HTTPS**
 
 ---
 
@@ -25,28 +25,36 @@ You will go step-by-step from:
 Install the following on your system:
 
 - Git
-- Python 3.10+  
-- pip  
-- Docker Desktop  
+- Python 3.10+
+- pip
+- Docker Desktop
 - VS Code (recommended)
+- AWS Student Account (AWS Academy / AWS Educate / GitHub Student Pack — any works)
+
+---
 
 ## 📦 Step 1 — Clone the Project
-```sh
-git clone https://github.com/iamsaroj2058/DevOps-Setup-Ecommerce-
-cd DevOps-Setup-Ecommerce-
+
+```bash
+git clone https://github.com/dev-rathankumar/django_clickmart_
+cd django_clickmart_
 ```
 
-## Step 2 - Remove Git history
-```sh
+**Step 2 - Remove Git history**
+
+```bash
 rm -rf .git
 ```
+
 This wipes your commit history & remote. Now it is just files in your local computer, not a repo.
 
-## Create your own GitHub repository
+**Create your own GitHub repository**
+
 Go to GitHub → Click New Repository → Name: django-clickmart
 
-## Re-initialize Git
-```sh
+**Re-initialize Git**
+
+```bash
 git init
 git add .
 git commit -m "Initial project setup"
@@ -54,28 +62,34 @@ git branch -M main
 git remote add origin https://github.com/<YOUR-USERNAME>/<REPOSITORY-NAME>.git
 git push -u origin main
 ```
+
 Now you have the full source code in your own repo.
 
+---
+
 ## Run Django Locally (Without Docker)
-Create virtual environment
-```sh
+
+**Create virtual environment**
+
+```bash
 cd backend-drf
-python -m venv env
+python3 -m venv env
 source env/bin/activate     # Mac / Linux
 # OR
 env\Scripts\activate        # Windows
 ```
 
-Install dependencies
-```sh
+**Install dependencies**
+
+```bash
 pip install -r requirements.txt
 ```
 
-Create ```.env``` file
-```sh
+**Create .env file**
+
+```
 DEBUG=True
 SECRET_KEY=<YOUR-SECRET-KEY>
-
 
 # Database Settings
 DB_NAME=<DATABASE-NAME>
@@ -89,18 +103,22 @@ EMAIL_HOST_USER=<YOUR-EMAIL-ADDRESS>
 EMAIL_HOST_PASSWORD=<PASSWORD> # USE APP PASSWORD IF YOU ARE USING GMAIL
 ```
 
-Create database tables and run the Django server
-```sh
+**Create database tables and run the Django server**
+
+```bash
 python manage.py migrate
 python manage.py runserver
 ```
 
-Create ```.env``` file inside /frontend/ directory and write:
-```sh
+**Create .env file inside /frontend/ directory and write:**
+
+```
 VITE_SERVER_BASE_URL=http://127.0.0.1:8000/api/v1
 ```
-And run the frontend - React
-```sh
+
+**And run the frontend - React**
+
+```bash
 npm install
 npm run dev
 ```
@@ -111,320 +129,279 @@ Optional: You can now create superuser and add some products.
 
 To learn about deployment, continue to next step...
 
+---
+
 ## Install and verify Docker and Docker Compose
-```sh
+
+```bash
 docker --version
 docker compose version
 ```
 
-## Create Dockerfile for backend
-Create a new file "Dockerfile" inside /backend-drf/ folder
-```sh
-# Purpose: A Dockerfile is a step-by-step instruction file that tells Docker how to build and run our application.
-FROM python:3.10-slim
+_(All Dockerfile and docker-compose.yml steps remain the same as before. Continue until you have completed the "Create superuser inside Docker container" step.)_
 
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-# gunicorn = production server, clickmart_main.wsgi:application = Django entry point, --bind 0.0.0.0:8000 = external traffic. Reminaing: tuning options
-# A worker is just one instance of your Django app running inside Gunicorn.
-CMD ["gunicorn", "clickmart_main.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3" , "--timeout", "180"]
-```
-
-## Create Dockerfile for frontend
-Create a new file "Dockerfile" inside /frontend/ folder
-```sh
-# Stage 1: Build
-FROM node:18 AS build
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-
-# Build arguments for environment variables
-ARG VITE_SERVER_BASE_URL
-
-# This line passes an environment variable into the Docker container so the React app knows the backend API URL.
-ENV VITE_SERVER_BASE_URL=$VITE_SERVER_BASE_URL
-
-RUN npm run build
-
-# Stage 2: Nginx, alpine means the lighter version of Nginx
-FROM nginx:alpine
-
-# Copy build output to Nginx html directory
-COPY --from=build /app/dist /usr/share/nginx/html
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-## On the root directory, create a file "docker-compose.yml"
-```sh
-services:
-  db:
-    image: postgres:16-alpine
-    env_file:
-      - .env.production
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  backend:
-    build: ./backend-drf
-    ports:
-      - "8000:8000"
-    env_file:
-      - ./backend-drf/.env.docker
-    depends_on:
-      - db
-    volumes:
-      - ./backend-drf/static:/app/static
-      - ./backend-drf/media:/app/media
-    command: >
-      sh -c "python manage.py collectstatic --noinput &&
-             python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_SERVER_BASE_URL: "http://backend:8000/api/v1"
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
-
-
-# This creates a named Docker volume to permanently store PostgreSQL data.
-# Without this:
-  # Database data is stored inside the container
-  # If container is deleted → data is lost
-# With this:
-  # Data is stored in a Docker-managed volume
-  # Data persists even if container stops or restarts
-volumes:
-  postgres_data:
-```
-
-Make sure to create a copy of ```.env``` and name it as ```.env.docker```
-```sh
-SECRET_KEY=<YOUR-DJANGO-SECRETKEY>
-DEBUG=True
-
-# Database Settings
-DB_NAME=<YOUR_DOCKER-DB>
-DB_USER=postgres
-DB_PASSWORD=<PASSWORD>
-DB_HOST=db
-DB_PORT=5432
-
-
-EMAIL_HOST_USER=<YOUR-EMAIL-ADDRESS>
-EMAIL_HOST_PASSWORD=<YOUR-PASSWORD> # app password if you're using Gmail account
-```
-
-Run this command to Dockerize your project:
-```sh
-docker compose up --build
-```
-Your project is now Dockerized ✅
-
-See the docker container health:
-```sh
-docker compose ps
-```
-
-You can try creating superuser inside Docker container.
-```sh
+```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-## Create Linode Server & SSH Key
+✅ You have completed the local Docker setup. Now let's move to AWS.
 
-👉 [Create a Linode account](https://rathank.appzoneit.com/linode/)
+---
 
-##### Create SSH Key
-On your local machine:
+## Create AWS EC2 Server & SSH Key
+
+### 👉 Login to your AWS Student Account
+
+- Go to [https://aws.amazon.com](https://aws.amazon.com)
+- Login with your student/sandbox credentials
+- Make sure you are in a region close to you (e.g., `us-east-1`, `ap-south-1`)
+
+---
+
+### Launch an EC2 Instance
+
+**Go to EC2 Dashboard**
+
+AWS Console → Search "EC2" → Click "Launch Instance"
+
+**Fill in the details:**
+
+| Field         | Value                                        |
+| ------------- | -------------------------------------------- |
+| Name          | django-clickmart                             |
+| AMI (OS)      | Ubuntu Server 22.04 LTS (Free Tier eligible) |
+| Instance Type | t2.micro (Free Tier eligible)                |
+| Key pair      | Create new key pair (see below)              |
+| Storage       | 20 GB gp2 (default is fine)                  |
+
+---
+
+### Create SSH Key Pair
+
+When asked for Key Pair during EC2 launch:
+
+- Click **"Create new key pair"**
+- Name: `clickmart-aws`
+- Key pair type: `ED25519`
+- Private key file format: `.pem`
+- Click **"Create key pair"** — it will auto-download a `.pem` file
+
+Save the `.pem` file safely. You cannot download it again.
+
+Move it to your SSH folder:
+
 ```bash
-ls ~/.ssh
-ssh-keygen -t ed25519 -C "clickmart-linode"
+mv ~/Downloads/clickmart-aws.pem ~/.ssh/clickmart-aws.pem
+chmod 400 ~/.ssh/clickmart-aws.pem
 ```
 
-Copy the public key and add it to Linode UI:
-```ssh
-cat ~/.ssh/linode.pub
+---
+
+### Configure Security Group (Firewall)
+
+During EC2 launch, under **"Network settings"** → Click **"Edit"**
+
+Add the following inbound rules:
+
+| Type       | Port | Source                          |
+| ---------- | ---- | ------------------------------- |
+| SSH        | 22   | My IP (or Anywhere for testing) |
+| HTTP       | 80   | Anywhere                        |
+| Custom TCP | 8000 | Anywhere                        |
+| Custom TCP | 5173 | Anywhere                        |
+
+> ⚠️ If ports are not opened, the app will run but won't be accessible from the browser.
+
+Click **"Launch Instance"**.
+
+---
+
+### Get Your EC2 Public IP
+
+Go to EC2 → Instances → Click your instance → Copy **Public IPv4 address**
+
+---
+
+### SSH into EC2
+
+```bash
+ssh -i ~/.ssh/clickmart-aws.pem ubuntu@<EC2_PUBLIC_IP>
 ```
 
-## SSH into Linode (Passwordless)
-```sh
-ssh root@<LINODE_IP>
+> Note: AWS Ubuntu instances use `ubuntu` as the username, not `root`.
+
+**Update the server:**
+
+```bash
+sudo apt update && sudo apt upgrade -y
 ```
 
-Update the server:
-```sh
-apt update && apt upgrade -y
-```
+---
 
-## Install Required Software
-Install Docker:
-```sh
+## Install Required Software on EC2
+
+**Install Docker:**
+
+```bash
 curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker ubuntu
+newgrp docker
 docker --version
 ```
 
-Install Docker Compose:
-```sh
-apt install docker-compose-plugin -y
+**Install Docker Compose:**
+
+```bash
+sudo apt install docker-compose-plugin -y
+docker compose version
 ```
 
-Install Git:
-```sh
-apt install git -y
+**Install Git:**
+
+```bash
+sudo apt install git -y
 git --version
 ```
 
 ✅ Docker, Docker Compose, and Git installed successfully.
 
+---
+
 ## Clone Project into /opt
+
 Reconnect to SSH (if disconnected):
-```sh
+
+```bash
+ssh -i ~/.ssh/clickmart-aws.pem ubuntu@<EC2_PUBLIC_IP>
+```
+
+```bash
 cd /opt
-mkdir clickmart
+sudo mkdir clickmart
+sudo chown ubuntu:ubuntu clickmart
 cd clickmart
 git clone https://github.com/your-repo.git .
 ```
-Repo is now cloned inside /opt/clickmart
+
+Repo is now cloned inside `/opt/clickmart`
+
+---
 
 ## Update Frontend Environment Variable
-In docker-compose.yml:
-```sh
-VITE_SERVER_BASE_URL="http://<LINODE_IP>:8000/api/v1"
+
+In `docker-compose.yml`:
+
+```yaml
+VITE_SERVER_BASE_URL="http://<EC2_PUBLIC_IP>:8000/api/v1"
 ```
 
 Push changes:
-```sh
+
+```bash
 git push origin main
 ```
 
-## Create Environment Files on Linode
-```sh
+---
+
+## Create Environment Files on EC2
+
+```bash
 nano backend-drf/.env.production
 nano backend-drf/.env.docker
 ```
-Add required environment variables inside it.
 
-## Open Firewall Ports on Linode
-⚠️ If ports are not opened, the app will run but won’t be accessible.
+Add required environment variables inside each file.
 
-Required Ports (Initial Setup)
-```sh
-SSH: 22
-Django Backend: 8000
-React Frontend: 5173
-```
-
-```sh
-Inbound Rules:
-
-Allow TCP 22
-Allow TCP 8000
-Allow TCP 5173
-```
+---
 
 ## Build & Run Docker Containers
-```sh
+
+```bash
 docker compose up --build -d
 docker compose ps
 ```
 
-Test in browser:
+**Test in browser:**
 
-Backend: http://<LINODE_IP>:8000/
+- Backend: `http://<EC2_PUBLIC_IP>:8000/`
+- Frontend: `http://<EC2_PUBLIC_IP>:5173/`
 
-Frontend: http://<LINODE_IP>:5173/
+---
 
 ## Fix Django ALLOWED_HOSTS
-In local settings.py:
-```sh
+
+**In local `settings.py`:**
+
+```python
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
-    'http://<LINODE_IP>:5173'
+    'http://<EC2_PUBLIC_IP>:5173'
 ]
 ```
 
-In local .env.docker:
-```sh
-ALLOWED_HOSTS=<LINODE_IP>,localhost,127.0.0.1
+**In local `.env.docker`:**
+
+```
+ALLOWED_HOSTS=<EC2_PUBLIC_IP>,localhost,127.0.0.1
 ```
 
-In linode .env.docker:
-```sh
-ALLOWED_HOSTS=<LINODE_IP>,localhost,127.0.0.1
+**In EC2 `.env.docker`:**
+
+```
+ALLOWED_HOSTS=<EC2_PUBLIC_IP>,localhost,127.0.0.1
 ```
 
-In docker-compose.yml:
-```sh
-VITE_SERVER_BASE_URL: "http://<LINODE_IP>/api/v1"
+**In `docker-compose.yml`:**
+
+```yaml
+VITE_SERVER_BASE_URL: "http://<EC2_PUBLIC_IP>/api/v1"
 ```
 
-Push to GitHub:
-```sh
+**Push to GitHub:**
+
+```bash
 git add .
 git commit -m "Allowed host & environments added"
 git push origin main
 ```
-This will push the changes to GitHub.
 
-### 🎯 Goal - Whenever I push code to GitHub, my Linode server should automatically update.
+---
+
+## 🎯 Goal - Whenever I push code to GitHub, my EC2 server should automatically update.
 
 But first...
 
-### Manually pull the code from GitHub to Linode.
-While logged-in to Linode:
-```sh
+**Manually pull the code from GitHub to EC2.**
+
+While logged in to EC2:
+
+```bash
 git pull origin main
 ```
 
-Rebuild containers:
-```sh
+**Rebuild containers:**
+
+```bash
 docker compose down -v
 docker compose up --build -d
 ```
 
-## Rule Before Automation
-❗Never automate something you haven’t done manually.
+**Rule Before Automation**
 
+> ❗Never automate something you haven't done manually.
+
+---
 
 ## Setup CI/CD (GitHub Actions)
-In local project:
 
-Create a new file:  
+In local project, create a new file:
 
-```sh
-.github/workflows/automate.yml
-```
-```sh
-name: Auto Deploy to Linode
+`.github/workflows/automate.yml`
+
+```yaml
+name: Auto Deploy to AWS EC2
 
 on:
   push:
@@ -439,43 +416,56 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.LINODE_HOST }}
-          username: ${{ secrets.LINODE_USER }}
-          key: ${{ secrets.LINODE_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /opt/clickmart
             git pull origin main
             docker compose up --build -d
 ```
 
-Add GitHub Secrets:
+**Add GitHub Secrets:**
+
 GitHub → Your Repository → Settings → Secrets and variables → Actions → New repository secret
 
-```
-LINODE_HOST → <LINODE_IP>
-LINODE_USER → root
-LINODE_SSH_KEY → Private SSH Key
+| Secret Name | Value                                                                                |
+| ----------- | ------------------------------------------------------------------------------------ |
+| EC2_HOST    | `<EC2_PUBLIC_IP>`                                                                    |
+| EC2_USER    | `ubuntu`                                                                             |
+| EC2_SSH_KEY | Contents of your `.pem` file (open it with a text editor and paste the full content) |
+
+**How to copy the SSH private key content:**
+
+```bash
+cat ~/.ssh/clickmart-aws.pem
 ```
 
-## Push automation file:
-```sh
+Copy everything including `-----BEGIN OPENSSH PRIVATE KEY-----` and paste it as the secret value.
+
+**Push automation file:**
+
+```bash
 git add .
 git commit -m "CI/CD Setup"
 git push origin main
 ```
 
-Check GitHub Actions tab.
+Check the **GitHub Actions** tab.
 
 Make a small frontend change and confirm auto-deploy.
 
 ✅ Auto deploy successful.
 
+---
+
 ## Nginx Config
+
 From local project, create file:
-```sh
-nginx/default.conf
-```
-```
+
+`nginx/default.conf`
+
+```nginx
 server {
     listen 80;
 
@@ -507,12 +497,14 @@ server {
     }
 }
 ```
-### Docker Compose Changes
+
+**Docker Compose Changes**
+
 - Add nginx service
 - Remove ports from backend & frontend
-- Update frontend API URL: ``` VITE_SERVER_BASE_URL="/api/v1" ```
+- Update frontend API URL: `VITE_SERVER_BASE_URL="/api/v1"`
 
-```
+```yaml
 nginx:
   image: nginx:alpine
   ports:
@@ -525,189 +517,247 @@ nginx:
 ```
 
 Push changes:
-```sh
+
+```bash
 git add .
 git commit -m "Nginx Setup"
 git push origin main
 ```
 
-## Update Firewall (Production)
-Keep:
-- ```22``` (SSH)
-- ```80``` (HTTP)
+---
 
-Remove:
-- ```8000``` (Backend)
-- ```5173``` (Frontend)
+## Update Firewall (Production)
+
+Go to AWS Console → EC2 → Security Groups → Click your instance's security group → Edit inbound rules
+
+**Keep:**
+
+- 22 (SSH)
+- 80 (HTTP)
+
+**Remove:**
+
+- 8000 (Backend)
+- 5173 (Frontend)
+
+---
 
 ## Final Test
-http://<LINODE_IP>/
 
-If you get error: Add ```backend``` to allowed host in linode server manually.
+`http://<EC2_PUBLIC_IP>/`
 
-Restart docker:
-```sh
+If you get an error: SSH into EC2 and manually add backend to allowed hosts in `.env.docker`.
+
+**Restart docker:**
+
+```bash
 docker compose down -v
 docker compose up --build -d
 ```
 
+---
+
 ## Gunicorn Setup (Production WSGI Server)
 
-### 1. Add Gunicorn Dependency
-Add `gunicorn` inside `requirements.txt`:
+**1. Add Gunicorn Dependency**
 
+Add `gunicorn` inside `requirements.txt`
 
-#### Update Backend Dockerfile
+**Update Backend Dockerfile**
 
-No special change is required other than ensuring requirements.txt is installed.
-Gunicorn will be installed automatically via dependencies.
+No special change is required other than ensuring `requirements.txt` is installed. Gunicorn will be installed automatically via dependencies.
 
-#### Update docker-compose.yml
+**Update `docker-compose.yml`**
+
 Replace the Django run command with Gunicorn:
-```
+
+```yaml
 command: >
   gunicorn clickmart_main.wsgi:application --bind 0.0.0.0:8000 --workers 3
 ```
-- clickmart_main.wsgi:application → Django entry point
-- --bind 0.0.0.0:8000 → Listen on all interfaces
-- --workers 3 → Run 3 Python worker processes
 
-```
+- `clickmart_main.wsgi:application` → Django entry point
+- `--bind 0.0.0.0:8000` → Listen on all interfaces
+- `--workers 3` → Run 3 Python worker processes
+
+```bash
 git add .
 git commit -m "Deploy Gunicorn"
 git push origin main
 ```
 
-#### Important Note
+**Important Note**
+
 ✅ We did not change the application code.
 
 ✅ We only changed how Python code is executed in production.
 
-### Verify Gunicorn Is Running
-SSH into the Linode server:
-```
-ssh root@<LINODE_IP>
+**Verify Gunicorn Is Running**
+
+SSH into the EC2 server:
+
+```bash
+ssh -i ~/.ssh/clickmart-aws.pem ubuntu@<EC2_PUBLIC_IP>
 cd /opt/clickmart
 docker compose logs backend
 ```
+
+---
 
 ## Purchase a Domain
 
 Purchase a domain from any provider (GoDaddy, Namecheap, etc.).
 
-Connect Domain to Linode (DNS)
+**Connect Domain to AWS EC2 (DNS)**
+
 Add the following A records in your domain DNS:
-| Type | Host | Value              |
-| ---- | ---- | ------------------ |
-| A    | @    | `<YOUR_LINODE_IP>` |
-| A    | www  | `<YOUR_LINODE_IP>` |
+
+| Type | Host | Value                  |
+| ---- | ---- | ---------------------- |
+| A    | @    | `<YOUR_EC2_PUBLIC_IP>` |
+| A    | www  | `<YOUR_EC2_PUBLIC_IP>` |
 
 Wait for DNS propagation (usually a few minutes to a few hours).
 
-### Nginx Config as Server-Managed File
-Certbot modifies the Nginx config directly on the server,
-so we must remove it from Git tracking.
-```
+> ⚠️ AWS EC2 Free Tier IPs can change if you stop/start your instance. To get a permanent IP, assign an **Elastic IP** to your instance (free while the instance is running).
+
+**How to assign Elastic IP:**
+
+AWS Console → EC2 → Elastic IPs → Allocate Elastic IP address → Associate it with your instance.
+
+Now your IP will never change even after restarts.
+
+---
+
+## Nginx Config as Server-Managed File
+
+Certbot modifies the Nginx config directly on the server, so we must remove it from Git tracking.
+
+```bash
 git rm --cached nginx/default.conf
 ```
-- Removes the file from Git
 
-Add to .gitignore:
+Removes the file from Git. Add to `.gitignore`:
+
 ```
 nginx/default.conf
 ```
 
-#### Commit and Push
-```
+**Commit and Push**
+
+```bash
 git add .
 git commit -m "Make nginx config server-managed"
 git push origin main
 ```
 
-#### SSH into Linode server
-- Create `nginx/default.conf` file
-- Add domain to this file:
+**SSH into EC2 server**
+
+```bash
+ssh -i ~/.ssh/clickmart-aws.pem ubuntu@<EC2_PUBLIC_IP>
 ```
+
+Create `nginx/default.conf` file and add domain to this file:
+
+```nginx
 server_name example.com www.example.com;
 ```
-Restart nginx:
-```
+
+**Restart nginx:**
+
+```bash
 docker compose restart nginx
 ```
-#### Update Django ALLOWED_HOSTS
+
+**Update Django ALLOWED_HOSTS**
+
 Add your domain into `.env.docker`
 
-Restart backend:
-```
+**Restart backend:**
+
+```bash
 docker compose restart backend
 ```
-### Test Domain (HTTP only
-http://example.com
 
-## Install SSL (Let’s Encrypt)
+**Test Domain (HTTP only)**
+
+`http://example.com`
+
+---
+
+## Install SSL (Let's Encrypt)
 
 In the server root directory, create folders:
-```
+
+```bash
 mkdir -p certbot/www
 mkdir -p certbot/conf
 ```
-### Update docker-compose.yml (Nginx service)
-Edit docker-compose.yml locally (nginx service):
-```
+
+**Update `docker-compose.yml` (Nginx service)**
+
+Edit `docker-compose.yml` locally (nginx service):
+
+```yaml
 volumes:
   - ./certbot/www:/var/www/certbot
   - ./certbot/conf:/etc/letsencrypt
 ```
+
 Push to main branch.
 
-### Update nginx/default.conf
-Edit `nginx/default.conf`
+**Update `nginx/default.conf`**
 
 Add this block:
-```
+
+```nginx
 location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
+    root /var/www/certbot;
+}
 ```
 
 Restart Nginx container:
-```
+
+```bash
 docker compose restart nginx
 ```
-Make sure the site with HTTP still works at this point:
 
-### Install Certbot
-```
-apt update
-apt install certbot -y
+Make sure the site with HTTP still works at this point.
+
+**Install Certbot**
+
+```bash
+sudo apt update
+sudo apt install certbot -y
 ```
 
-### Get SSL Certificate (WEBROOT METHOD)
-```
-certbot certonly \
+**Get SSL Certificate (WEBROOT METHOD)**
+
+```bash
+sudo certbot certonly \
   --webroot \
   -w /opt/clickmart/certbot/www \
-  -d djangoclickmart.store \
-  -d www.djangoclickmart.store
+  -d example.com \
+  -d www.example.com
 ```
 
-### Enable HTTPS in Nginx
-Edit `nginx/default.conf` again:
+**Enable HTTPS in Nginx**
 
-Replace with FINAL CONFIG:
-```
+Edit `nginx/default.conf` again. Replace with FINAL CONFIG:
+
+```nginx
 server {
     listen 80;
-    server_name djangoclickmart.store www.djangoclickmart.store;
+    server_name example.com www.example.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name djangoclickmart.store www.djangoclickmart.store;
+    server_name example.com www.example.com;
 
-    ssl_certificate /etc/letsencrypt/live/djangoclickmart.store/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/djangoclickmart.store/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
 
     location / {
         proxy_pass http://frontend:80;
@@ -725,78 +775,87 @@ server {
         alias /static/;
     }
 }
-
 ```
 
+**Restart Nginx**
 
-
-
-#### Restart Nginx
+```bash
 docker compose restart nginx
+```
 
-#### Test HTTPS 🎉
-https://example.com
+**Test HTTPS 🎉**
+
+`https://example.com`
 
 Congratulations 🎉 You did it.
 
-# Fixing Media Files in Production (Docker + Nginx + Django)
-
-This guide explains how to fix issues where **media files (uploaded images)** are not loading correctly in production.
-
 ---
 
-### Step 1: Update Nginx Configuration (Server)
+## Fixing Media Files in Production (Docker + Nginx + Django)
 
-1. Login to your production server.
-2. Open the Nginx config file:
+This guide explains how to fix issues where media files (uploaded images) are not loading correctly in production.
+
+**Step 1: Update Nginx Configuration (Server)**
+
+Login to your production server.
+
+Open the Nginx config file:
 
 ```bash
 nano nginx/default.conf
 ```
 
-3. Add the following block inside the HTTPS server block:
-```
+Add the following block inside the HTTPS server block:
+
+```nginx
 location /media/ {
     alias /media/;
 }
 ```
+
 This tells Nginx to serve uploaded media files directly.
-4. Restart nginx container:
-```
+
+Restart nginx container:
+
+```bash
 docker compose restart nginx
 ```
 
-### Step 2: Mount Media Folder in Docker (Local Project)
-1. Open `docker-compose.yml` - in your local project
-2. Inside the nginx service, add the media volume mapping:
-```
+**Step 2: Mount Media Folder in Docker (Local Project)**
+
+Open `docker-compose.yml` in your local project. Inside the nginx service, add the media volume mapping:
+
+```yaml
 nginx:
-    volumes:
-      - ./backend-drf/media:/media
+  volumes:
+    - ./backend-drf/media:/media
 ```
+
 This allows the Nginx container to access uploaded media files created by Django.
 
-3. Commit and push the changes:
-```
+Commit and push the changes:
+
+```bash
 git add .
 git commit -m "Serve media files using nginx"
 git push origin main
 ```
 
-### Step 3: Verify Media Files
+**Step 3: Verify Media Files**
+
 Try opening a media file directly in the browser:
-```
-https://your-domain.com/media/example.jpg
-```
+
+`https://your-domain.com/media/example.jpg`
+
 If the image loads, media serving is working correctly.
 
-### Step 4 (Fallback): Fix Serializer Image URL
+**Step 4 (Fallback): Fix Serializer Image URL**
+
 If media files load directly but still do not appear on the webpage, update the serializer to return a relative media path.
 
-1. Open `products/serializers.py`
-3. Update `ProductSerializer` - or whatever serializer the image is coming from.
-Refer to below code:
-```
+Open `products/serializers.py`. Update `ProductSerializer` - or whatever serializer the image is coming from. Refer to below code:
+
+```python
 from rest_framework import serializers
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -810,12 +869,24 @@ class ProductSerializer(serializers.ModelSerializer):
         return obj.image.url if obj.image else None
 ```
 
-This ensures the API returns: `/media/products/image.jpg` instead of Docker-internal URLs like `backend:8000`
+This ensures the API returns `/media/products/image.jpg` instead of Docker-internal URLs like `backend:8000`
 
-4. Commit and push again:
-```
+Commit and push again:
+
+```bash
 git add .
 git commit -m "Fix media image URL in serializer"
 git push origin main
 ```
-5. Test again.
+
+Test again.
+
+---
+
+## 💡 AWS Student Account Tips
+
+- **t2.micro** is free tier eligible — always choose this instance type.
+- **Elastic IP** is free as long as the instance is running. If you stop the instance without releasing the Elastic IP, AWS will charge a small amount. Either keep the instance running or release the Elastic IP when not using it.
+- **AWS Sandbox / Academy accounts** may have region restrictions. If EC2 is not available, switch to `us-east-1`.
+- Your sandbox credits are limited — avoid running heavy instance types or multiple instances at once.
+- Set up a **billing alert** in AWS Console → Billing → Budgets to get notified if you're close to your credit limit.
